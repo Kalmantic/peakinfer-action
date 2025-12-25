@@ -1,0 +1,52 @@
+name: 'PeakInfer'
+description: 'Analyze LLM inference points in your code for cost, latency, throughput, and reliability issues'
+author: 'Kalmantic AI Labs'
+
+branding:
+  icon: 'zap'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'Path to analyze'
+    required: false
+    default: './src'
+  token:
+    description: 'PeakInfer API token (get from peakinfer.com)'
+    required: true
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+  events:
+    description: 'Path to runtime events file (JSONL) for drift detection'
+    required: false
+  events-map:
+    description: 'Field mappings for non-standard event formats (e.g., "timestamp=time,model=model_name")'
+    required: false
+  inline-comments:
+    description: 'Post inline comments on specific lines'
+    required: false
+    default: 'true'
+  fail-on-critical:
+    description: 'Fail the action if critical issues are found'
+    required: false
+    default: 'false'
+  compare-baseline:
+    description: 'Compare to previous analysis baseline'
+    required: false
+    default: 'false'
+
+outputs:
+  status:
+    description: 'Analysis status (pass, warning, fail)'
+  inference-points:
+    description: 'Number of inference points found'
+  issues:
+    description: 'Number of issues found'
+  summary:
+    description: 'JSON summary of analysis results'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
