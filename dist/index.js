@@ -30049,8 +30049,22 @@ async function callAnalysisAPI(token, files, context, options) {
 // =============================================================================
 // PR COMMENT
 // =============================================================================
+function countIssues(inferencePoints) {
+    let critical = 0;
+    let warnings = 0;
+    for (const point of inferencePoints) {
+        for (const issue of point.issues || []) {
+            if (issue.severity === 'critical')
+                critical++;
+            else if (issue.severity === 'warning')
+                warnings++;
+        }
+    }
+    return { critical, warnings };
+}
 function generateComment(analysis, credits) {
-    const { inferencePoints, summary } = analysis;
+    const { inferencePoints, insights, summary } = analysis;
+    const issueCounts = countIssues(inferencePoints);
     const lines = [
         '## PeakInfer Analysis',
         '',
@@ -30063,10 +30077,10 @@ function generateComment(analysis, credits) {
         lines.push(`*Credits remaining: ${credits.remaining}*`);
         return lines.join('\n');
     }
-    lines.push(`Found **${summary.totalInferencePoints} inference points**`);
+    lines.push(`Found **${summary.totalInferencePoints} inference points** across ${summary.totalFiles} files`);
     lines.push('');
-    // Issues table
-    if (summary.criticalIssues > 0 || summary.warnings > 0) {
+    // Issues from inference points
+    if (issueCounts.critical > 0 || issueCounts.warnings > 0) {
         lines.push('### Issues');
         lines.push('');
         lines.push('| Location | Severity | Issue |');
@@ -30079,7 +30093,18 @@ function generateComment(analysis, credits) {
         }
         lines.push('');
     }
-    else {
+    // High-priority insights
+    const criticalInsights = insights.filter(i => i.severity === 'critical' || i.severity === 'warning');
+    if (criticalInsights.length > 0) {
+        lines.push('### Insights');
+        lines.push('');
+        for (const insight of criticalInsights.slice(0, 5)) {
+            const icon = insight.severity === 'critical' ? '🔴' : '🟡';
+            lines.push(`- ${icon} **${insight.title}**: ${insight.description}`);
+        }
+        lines.push('');
+    }
+    if (issueCounts.critical === 0 && issueCounts.warnings === 0 && criticalInsights.length === 0) {
         lines.push('✅ No issues detected.');
         lines.push('');
     }
@@ -30180,13 +30205,14 @@ async function run() {
             body: comment,
         });
         // Set outputs
-        core.setOutput('status', analysis.summary.criticalIssues > 0 ? 'fail' : 'pass');
+        const issueCounts = countIssues(analysis.inferencePoints);
+        core.setOutput('status', issueCounts.critical > 0 ? 'fail' : 'pass');
         core.setOutput('inference-points', analysis.summary.totalInferencePoints);
-        core.setOutput('issues', analysis.summary.criticalIssues + analysis.summary.warnings);
+        core.setOutput('issues', issueCounts.critical + issueCounts.warnings);
         core.setOutput('summary', JSON.stringify(analysis.summary));
         // Fail if critical issues and configured to do so
-        if (inputs.failOnCritical && analysis.summary.criticalIssues > 0) {
-            core.setFailed(`Found ${analysis.summary.criticalIssues} critical issues`);
+        if (inputs.failOnCritical && issueCounts.critical > 0) {
+            core.setFailed(`Found ${issueCounts.critical} critical issues`);
         }
     }
     catch (error) {

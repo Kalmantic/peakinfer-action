@@ -1,149 +1,169 @@
 # PeakInfer GitHub Action
 
-Analyze LLM inference points in your pull requests for cost, latency, throughput, and reliability issues.
+> Catch LLM inference issues before they hit production. Analyzes cost, latency, throughput, and reliability.
 
-## Setup
+## Quickstart (2 minutes)
 
-### 1. Get Your API Token
+**Step 1:** Get your token at [peakinfer.com/dashboard](https://peakinfer.com/dashboard) (50 free credits, no card needed)
 
-1. Go to [peakinfer.com](https://peakinfer.com)
-2. Sign in with GitHub
-3. Navigate to **Settings** → **API Tokens**
-4. Click **Generate Token**
-5. Copy the token (you won't see it again)
+**Step 2:** Add secret to your repo: Settings → Secrets → Actions → `PEAKINFER_TOKEN`
 
-New accounts get **50 free credits** (no credit card required).
-
-### 2. Add Token to Repository Secrets
-
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `PEAKINFER_TOKEN`
-5. Value: Paste your token from step 1
-6. Click **Add secret**
-
-### 3. Create Workflow File
-
-Create `.github/workflows/peakinfer.yml` in your repository:
+**Step 3:** Create `.github/workflows/peakinfer.yml`:
 
 ```yaml
 name: PeakInfer
-on:
-  pull_request:
-    branches: [main]
+on: [pull_request]
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: kalmantic/peakinfer-action@v1
         with:
           token: ${{ secrets.PEAKINFER_TOKEN }}
-          path: ./src
 ```
 
-That's it! PeakInfer will now analyze every PR for LLM inference issues.
+Done. Open a PR and see the analysis.
 
-## Usage
+---
+
+## What You'll See
+
+PeakInfer posts a comment on every PR with LLM inference points:
+
+```
+## PeakInfer Analysis
+
+Found **3 inference points** across 2 files
+
+### Issues
+
+| Location | Severity | Issue |
+|----------|----------|-------|
+| `src/chat.ts:42` | 🔴 critical | GPT-4 used for simple classification task |
+| `src/api.ts:89` | 🟡 warning | No retry logic on API call |
+| `src/api.ts:156` | 🟡 warning | Streaming enabled but not consumed |
+
+---
+*Credits remaining: 47 • [PeakInfer](https://peakinfer.com)*
+```
+
+---
+
+## Configuration
 
 ```yaml
-name: PeakInfer
-on:
-  pull_request:
-    branches: [main]
+- uses: kalmantic/peakinfer-action@v1
+  with:
+    # Required
+    token: ${{ secrets.PEAKINFER_TOKEN }}
 
-jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: kalmantic/peakinfer-action@v1
-        with:
-          token: ${{ secrets.PEAKINFER_TOKEN }}
-          path: ./src
+    # Optional
+    path: ./src              # Directory to analyze (default: ./src)
+    fail-on-critical: true   # Block PR if critical issues found
 ```
 
-## Inputs
+### All Options
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `token` | Yes | — | PeakInfer API token ([get one](https://peakinfer.com)) |
-| `path` | No | `./src` | Path to analyze |
-| `github-token` | No | `${{ github.token }}` | GitHub token for PR comments |
-| `events` | No | — | Path to runtime events file (JSONL) |
-| `events-map` | No | — | Field mappings for non-standard formats |
-| `inline-comments` | No | `true` | Post inline comments on specific lines |
-| `fail-on-critical` | No | `false` | Fail if critical issues found |
-| `compare-baseline` | No | `false` | Compare to previous analysis |
+| Input | Default | Description |
+|-------|---------|-------------|
+| `token` | — | **Required.** API token from [dashboard](https://peakinfer.com/dashboard) |
+| `path` | `./src` | Path to analyze |
+| `fail-on-critical` | `false` | Fail the check if critical issues found |
+| `inline-comments` | `true` | Post inline comments on specific lines |
+| `compare-baseline` | `false` | Compare to previous analysis |
+| `events` | — | Path to runtime events JSONL for drift detection |
 
-## Outputs
+### Outputs
+
+```yaml
+- uses: kalmantic/peakinfer-action@v1
+  id: peakinfer
+  with:
+    token: ${{ secrets.PEAKINFER_TOKEN }}
+
+- run: echo "Found ${{ steps.peakinfer.outputs.inference-points }} inference points"
+```
 
 | Output | Description |
 |--------|-------------|
-| `status` | Analysis status (`pass`, `warning`, `fail`) |
-| `inference-points` | Number of inference points found |
+| `status` | `pass`, `warning`, or `fail` |
+| `inference-points` | Number of LLM calls detected |
 | `issues` | Number of issues found |
-| `summary` | JSON summary of results |
+| `summary` | Full JSON results |
 
-## What It Analyzes
+---
 
-PeakInfer detects issues across 4 dimensions:
+## What It Catches
 
-- **Cost** — Wrong model selection, overpowered usage
-- **Latency** — Missing streaming, blocking calls
-- **Throughput** — Sequential vs parallel opportunities
-- **Reliability** — Missing retries, timeouts, fallbacks
+| Dimension | Examples |
+|-----------|----------|
+| **Cost** | GPT-4 for simple tasks, over-tokenized prompts |
+| **Latency** | Missing streaming, blocking calls in hot paths |
+| **Throughput** | Sequential calls that could be parallel |
+| **Reliability** | No retries, missing timeouts, no fallbacks |
 
-## Runtime Drift Detection
+---
 
-Provide runtime events to detect drift between code and actual behavior:
+## Advanced: Runtime Drift Detection
+
+Compare your code against actual runtime behavior:
 
 ```yaml
 - uses: kalmantic/peakinfer-action@v1
   with:
     token: ${{ secrets.PEAKINFER_TOKEN }}
-    path: ./src
-    events: ./events.jsonl
+    events: ./logs/inference-events.jsonl
 ```
 
-## Pricing
+Detects when code says streaming but runtime shows batch, or when fallback models are being used more than expected.
 
-See [peakinfer.com/pricing](https://peakinfer.com/pricing) for credit packs.
+---
 
 ## Troubleshooting
 
-### "Invalid or missing token"
+<details>
+<summary><strong>Invalid or missing token</strong></summary>
 
-- Verify the secret name is exactly `PEAKINFER_TOKEN` (case-sensitive)
-- Check the token hasn't expired at [peakinfer.com/settings](https://peakinfer.com/settings)
-- Regenerate the token if needed
+1. Verify secret name is exactly `PEAKINFER_TOKEN` (case-sensitive)
+2. Check token at [peakinfer.com/dashboard](https://peakinfer.com/dashboard)
+3. Regenerate if needed
 
-### "Insufficient credits"
+</details>
 
-- Check your balance at [peakinfer.com/settings](https://peakinfer.com/settings)
-- Purchase credits at [peakinfer.com/pricing](https://peakinfer.com/pricing)
+<details>
+<summary><strong>Insufficient credits</strong></summary>
 
-### Action not running
+1. Check balance at [peakinfer.com/dashboard](https://peakinfer.com/dashboard)
+2. Buy more at [peakinfer.com/pricing](https://peakinfer.com/pricing)
 
-- Ensure the workflow file is in `.github/workflows/`
-- Check the `on:` trigger matches your use case (e.g., `pull_request`)
-- Verify the repository has Actions enabled (Settings → Actions → General)
+</details>
 
-### For organization repositories
+<details>
+<summary><strong>Action not running</strong></summary>
 
-Add the secret at the organization level:
-1. Go to **Organization Settings** → **Secrets and variables** → **Actions**
-2. Add `PEAKINFER_TOKEN` as an organization secret
-3. Grant access to specific repositories
+1. File must be in `.github/workflows/`
+2. Check Actions are enabled: Settings → Actions → General
+3. Trigger must match (e.g., `pull_request`)
 
-## CLI
+</details>
 
-For local analysis with your own API key (BYOK), use the [PeakInfer CLI](https://github.com/kalmantic/peakinfer).
+<details>
+<summary><strong>Organization repos</strong></summary>
 
-## License
+Add secret at org level: Org Settings → Secrets → Actions → Add `PEAKINFER_TOKEN` → Grant repo access
 
-MIT
+</details>
+
+---
+
+## Links
+
+- [Dashboard](https://peakinfer.com/dashboard) — Manage tokens, view credits
+- [Pricing](https://peakinfer.com/pricing) — Credit packs
+- [CLI](https://github.com/kalmantic/peakinfer) — Local analysis with your own API key
+
+---
+
+MIT License

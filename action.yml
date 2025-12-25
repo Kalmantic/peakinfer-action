@@ -15,9 +15,8 @@ inputs:
     description: 'PeakInfer API token (get from peakinfer.com)'
     required: true
   github-token:
-    description: 'GitHub token for PR comments'
+    description: 'GitHub token for PR comments (defaults to github.token)'
     required: false
-    default: ${{ github.token }}
   events:
     description: 'Path to runtime events file (JSONL) for drift detection'
     required: false
