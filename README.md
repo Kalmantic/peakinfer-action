@@ -44,6 +44,10 @@ Create `.github/workflows/peakinfer.yml`:
 name: PeakInfer
 on: [pull_request]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -52,6 +56,7 @@ jobs:
       - uses: kalmantic/peakinfer-action@v1
         with:
           token: ${{ secrets.PEAKINFER_TOKEN }}
+          github-token: ${{ github.token }}
 ```
 
 Open a PR to see the analysis.
@@ -87,6 +92,7 @@ Found **3 inference points** across 2 files
 - uses: kalmantic/peakinfer-action@v1
   with:
     token: ${{ secrets.PEAKINFER_TOKEN }}  # Required
+    github-token: ${{ github.token }}      # For PR comments
     path: ./src                             # Directory to analyze
     fail-on-critical: true                  # Block PR on critical issues
 ```
@@ -96,6 +102,7 @@ Found **3 inference points** across 2 files
 | Input | Default | Description |
 |-------|---------|-------------|
 | `token` | — | **Required.** Get at [peakinfer.com/dashboard](https://peakinfer.com/dashboard) |
+| `github-token` | — | **Required.** Use `${{ github.token }}` for PR comments |
 | `path` | `./src` | Directory to analyze |
 | `fail-on-critical` | `false` | Fail check if critical issues found |
 | `inline-comments` | `true` | Post inline PR comments |
