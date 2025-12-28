@@ -1,0 +1,102 @@
+name: 'PeakInfer'
+description: 'Analyze LLM inference points in your code for cost, latency, throughput, and reliability issues'
+author: 'Kalmantic AI Labs'
+
+branding:
+  icon: 'zap'
+  color: 'purple'
+
+inputs:
+  # Path
+  path:
+    description: 'Path to analyze'
+    required: false
+    default: './src'
+
+  # Auth (one required)
+  anthropic-api-key:
+    description: |
+      Your Anthropic API key (free mode).
+      Analysis runs on PeakInfer servers, Claude API calls use YOUR key.
+      Free - no credits consumed. Your key is securely passed to Claude API,
+      never stored by PeakInfer. Pass via secrets: ${{ secrets.ANTHROPIC_API_KEY }}
+      Note: For true local execution (BYOK), use the CLI instead.
+    required: false
+  peakinfer-token:
+    description: |
+      PeakInfer API token (credit mode).
+      Get your token at https://peakinfer.com/dashboard.
+      Analysis uses PeakInfer's API quota. Pass via secrets: ${{ secrets.PEAKINFER_TOKEN }}
+    required: false
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: true
+    default: ${{ github.token }}
+
+  # Layer 1: Runtime
+  runtime-source:
+    description: 'Runtime data source: helicone, langsmith'
+    required: false
+  runtime-api-key:
+    description: 'API key for runtime source'
+    required: false
+  events-file:
+    description: 'Path to runtime events file (JSONL)'
+    required: false
+  events-map:
+    description: 'Field mappings for non-standard formats'
+    required: false
+
+  # Layer 2: Benchmarks
+  include-benchmarks:
+    description: 'Compare to InferenceMAX benchmarks'
+    required: false
+    default: 'true'
+  benchmark-framework:
+    description: 'Benchmark framework: api, vllm, tgi'
+    required: false
+    default: 'api'
+
+  # Layer 3: Evals (Future)
+  evals-source:
+    description: 'Evals source: braintrust, evalica'
+    required: false
+  evals-api-key:
+    description: 'API key for evals source'
+    required: false
+
+  # Behavior
+  fail-on-critical:
+    description: 'Fail the action if critical issues are found'
+    required: false
+    default: 'false'
+  comment-mode:
+    description: 'When to post comments: always, on-issues, never'
+    required: false
+    default: 'always'
+  show-enhancement-prompts:
+    description: 'Show prompts for adding more layers'
+    required: false
+    default: 'true'
+
+outputs:
+  verdict:
+    description: 'PASS, OK, REVIEW, BLOCK, PAUSED, SKIP, ERROR'
+  critical-count:
+    description: 'Number of critical issues'
+  warning-count:
+    description: 'Number of warnings'
+  drift-count:
+    description: 'Number of drift detections'
+  layers-used:
+    description: 'Comma-separated list of active layers'
+  credits-used:
+    description: 'Credits consumed (paid mode)'
+  credits-remaining:
+    description: 'Credits remaining (paid mode)'
+  inference-points:
+    description: 'Number of inference points found'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
