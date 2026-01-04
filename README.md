@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: kalmantic/peakinfer-action@v1
+      - uses: Kalmantic/peakinfer-action@v1
         with:
           token: ${{ secrets.PEAKINFER_TOKEN }}
           github-token: ${{ github.token }}
@@ -110,7 +110,7 @@ Found **3 inference points** across 2 files
 ## Configuration
 
 ```yaml
-- uses: kalmantic/peakinfer-action@v1
+- uses: Kalmantic/peakinfer-action@v1
   with:
     token: ${{ secrets.PEAKINFER_TOKEN }}  # Required
     github-token: ${{ github.token }}      # For PR comments
@@ -131,7 +131,7 @@ Found **3 inference points** across 2 files
 ### Outputs
 
 ```yaml
-- uses: kalmantic/peakinfer-action@v1
+- uses: Kalmantic/peakinfer-action@v1
   id: peakinfer
   with:
     token: ${{ secrets.PEAKINFER_TOKEN }}
@@ -183,9 +183,9 @@ Found **3 inference points** across 2 files
 |---|---|
 | **Get token** | [peakinfer.com/dashboard](https://peakinfer.com/dashboard) |
 | **Add credits** | [peakinfer.com/pricing](https://peakinfer.com/pricing) |
-| **CLI (BYOK)** | [github.com/kalmantic/peakinfer](https://github.com/kalmantic/peakinfer) |
-| **VS Code Extension** | [github.com/kalmantic/peakinfer-vscode](https://github.com/kalmantic/peakinfer-vscode) |
-| **MCP Server** | [github.com/kalmantic/peakinfer-mcp](https://github.com/kalmantic/peakinfer-mcp) |
+| **CLI (BYOK)** | [github.com/Kalmantic/peakinfer](https://github.com/Kalmantic/peakinfer) |
+| **VS Code Extension** | [github.com/Kalmantic/peakinfer-vscode](https://github.com/Kalmantic/peakinfer-vscode) |
+| **MCP Server** | [github.com/Kalmantic/peakinfer-mcp](https://github.com/Kalmantic/peakinfer-mcp) |
 
 ---
 
