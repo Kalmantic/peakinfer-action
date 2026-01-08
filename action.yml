@@ -35,7 +35,7 @@ inputs:
 
   # Layer 1: Runtime
   runtime-source:
-    description: 'Runtime data source: helicone, langsmith'
+    description: 'Runtime data source: helicone, langfuse'
     required: false
   runtime-api-key:
     description: 'API key for runtime source'
