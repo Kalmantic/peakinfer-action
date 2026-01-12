@@ -152,6 +152,17 @@ interface EnhancementPrompt {
   docsUrl: string;
 }
 
+interface StatsResponse {
+  success: boolean;
+  stats?: {
+    thisMonth?: {
+      prsAnalyzed?: number;
+      criticalCaught?: number;
+      estimatedSavings?: number;
+    };
+  };
+}
+
 // =============================================================================
 // VERDICT LOGIC
 // =============================================================================
@@ -299,12 +310,12 @@ async function fetchOrgStats(token: string): Promise<{
       return null;
     }
 
-    const data = await response.json();
+    const data = await response.json() as StatsResponse;
     if (data.success && data.stats?.thisMonth) {
       return {
-        prsAnalyzed: data.stats.thisMonth.prsAnalyzed || 0,
-        criticalCaught: data.stats.thisMonth.criticalCaught || 0,
-        estimatedSavings: data.stats.thisMonth.estimatedSavings || 0,
+        prsAnalyzed: data.stats.thisMonth.prsAnalyzed ?? 0,
+        criticalCaught: data.stats.thisMonth.criticalCaught ?? 0,
+        estimatedSavings: data.stats.thisMonth.estimatedSavings ?? 0,
       };
     }
     return null;
