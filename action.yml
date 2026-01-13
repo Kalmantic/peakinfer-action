@@ -13,21 +13,13 @@ inputs:
     required: false
     default: './src'
 
-  # Auth (one required)
-  anthropic-api-key:
-    description: |
-      Your Anthropic API key (free mode).
-      Analysis runs on PeakInfer servers, Claude API calls use YOUR key.
-      Free - no credits consumed. Your key is securely passed to Claude API,
-      never stored by PeakInfer. Pass via secrets.ANTHROPIC_API_KEY.
-      Note: For true local execution (BYOK), use the CLI instead.
-    required: false
+  # Auth
   peakinfer-token:
     description: |
-      PeakInfer API token (credit mode).
+      PeakInfer API token (required).
       Get your token at https://peakinfer.com/dashboard.
-      Analysis uses PeakInfer's API quota. Pass via secrets.PEAKINFER_TOKEN.
-    required: false
+      Pass via secrets.PEAKINFER_TOKEN.
+    required: true
   github-token:
     description: 'GitHub token for PR comments'
     required: true

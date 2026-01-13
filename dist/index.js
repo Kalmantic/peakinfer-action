@@ -29928,12 +29928,12 @@ function wrappy (fn, cb) {
 "use strict";
 
 /**
- * PeakInfer GitHub Action v1.9.5
+ * PeakInfer GitHub Action v1.9.6
  *
  * Thin API client that calls peakinfer.com for analysis.
  * All analysis logic runs server-side - this action only:
  * 1. Collects files from the repository
- * 2. Sends them to the PeakInfer API (or uses BYOK mode)
+ * 2. Sends them to the PeakInfer API
  * 3. Posts results as PR comments with layer status
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -30050,16 +30050,11 @@ function collectFiles(dir, files = [], maxFiles = 50) {
 // =============================================================================
 // API CLIENT
 // =============================================================================
-async function callAnalysisAPI(auth, files, context, layers) {
+async function callAnalysisAPI(token, files, context, layers) {
     const headers = {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
     };
-    if (auth.isByok) {
-        headers['X-Anthropic-Api-Key'] = auth.token;
-    }
-    else {
-        headers['Authorization'] = `Bearer ${auth.token}`;
-    }
     const response = await fetch(`${PEAKINFER_API}/analyze`, {
         method: 'POST',
         headers,
@@ -30082,7 +30077,7 @@ async function callAnalysisAPI(auth, files, context, layers) {
                     apiKey: layers.evals.apiKey,
                 } : undefined,
             },
-            mode: auth.isByok ? 'byok' : 'paid',
+            mode: 'paid',
         }),
     });
     const data = await response.json();
@@ -30175,7 +30170,7 @@ function renderLayerStatus(layersUsed) {
     const check = (layer) => layersUsed.includes(layer) ? '✓' : '○';
     return `Code ${check('code')} | Runtime ${check('runtime')} | Benchmarks ${check('benchmarks')} | Evals ${check('evals')}`;
 }
-function generateComment(analysis, verdict, credits, showEnhancementPrompts, isByok) {
+function generateComment(analysis, verdict, credits, showEnhancementPrompts) {
     const { inferencePoints, drifts, benchmarkComparisons, insights, summary, layersUsed } = analysis;
     const issueCounts = countIssues(inferencePoints);
     const driftCount = drifts?.length || 0;
@@ -30291,10 +30286,7 @@ function generateComment(analysis, verdict, credits, showEnhancementPrompts, isB
     }
     // Footer
     lines.push('---');
-    if (isByok) {
-        lines.push('*[PeakInfer](https://peakinfer.com) | BYOK Mode*');
-    }
-    else if (credits) {
+    if (credits) {
         lines.push(`*Credits: ${credits.consumed} used | ${credits.remaining} remaining | [PeakInfer](https://peakinfer.com)*`);
     }
     else {
@@ -30375,8 +30367,7 @@ async function run() {
         const inputs = {
             path: core.getInput('path') || './src',
             // Auth
-            anthropicApiKey: core.getInput('anthropic-api-key') || undefined,
-            peakinferToken: core.getInput('peakinfer-token') || undefined,
+            peakinferToken: core.getInput('peakinfer-token') || '',
             githubToken: core.getInput('github-token') || process.env.GITHUB_TOKEN || '',
             // Layer 1: Runtime
             runtimeSource: core.getInput('runtime-source') || undefined,
@@ -30395,20 +30386,14 @@ async function run() {
             showEnhancementPrompts: core.getInput('show-enhancement-prompts') !== 'false',
         };
         // 1. Auth check
-        const isByok = !!inputs.anthropicApiKey;
-        const isPaid = !!inputs.peakinferToken;
-        if (!isByok && !isPaid) {
-            core.setFailed('Authentication required. Provide either anthropic-api-key (BYOK mode) or peakinfer-token (paid mode).');
+        if (!inputs.peakinferToken) {
+            core.setFailed('Authentication required. Provide peakinfer-token via secrets.PEAKINFER_TOKEN.');
             return;
         }
         if (!inputs.githubToken) {
             core.setFailed('GitHub token is required for PR comments');
             return;
         }
-        const auth = {
-            isByok,
-            token: isByok ? inputs.anthropicApiKey : inputs.peakinferToken,
-        };
         const context = github.context;
         const octokit = github.getOctokit(inputs.githubToken);
         // Check if PR context
@@ -30459,22 +30444,20 @@ async function run() {
         }
         // 4. Call API
         core.info('Calling PeakInfer API...');
-        const response = await callAnalysisAPI(auth, files, { repo, prNumber, sha }, layers);
+        const response = await callAnalysisAPI(inputs.peakinferToken, files, { repo, prNumber, sha }, layers);
         // 5. Handle errors
         if ('error' in response) {
             if (response.code === 'CREDIT_EXHAUSTED') {
                 core.warning('Credit limit reached');
                 // Fetch real org stats from the API
                 let valueDelivered = { prsAnalyzed: 0, criticalCaught: 0, estimatedSavings: 0 };
-                if (!auth.isByok && auth.token) {
-                    const stats = await fetchOrgStats(auth.token);
-                    if (stats) {
-                        valueDelivered = {
-                            prsAnalyzed: stats.prsAnalyzed,
-                            criticalCaught: stats.criticalCaught,
-                            estimatedSavings: stats.estimatedSavings,
-                        };
-                    }
+                const stats = await fetchOrgStats(inputs.peakinferToken);
+                if (stats) {
+                    valueDelivered = {
+                        prsAnalyzed: stats.prsAnalyzed,
+                        criticalCaught: stats.criticalCaught,
+                        estimatedSavings: stats.estimatedSavings,
+                    };
                 }
                 const comment = generateExhaustedComment(valueDelivered, { files: files.length, estimatedPoints: files.length * 3 });
                 await octokit.rest.issues.createComment({
@@ -30507,7 +30490,7 @@ async function run() {
         );
         // 7. Post PR comment
         if (inputs.commentMode === 'always' || (inputs.commentMode === 'on-issues' && (issueCounts.critical > 0 || issueCounts.warnings > 0))) {
-            const comment = generateComment(analysis, verdict, credits, inputs.showEnhancementPrompts, isByok);
+            const comment = generateComment(analysis, verdict, credits, inputs.showEnhancementPrompts);
             await octokit.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
