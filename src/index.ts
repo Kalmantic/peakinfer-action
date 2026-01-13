@@ -604,7 +604,7 @@ async function run(): Promise<void> {
     const inputs: ActionInputs = {
       path: core.getInput('path') || './src',
       // Auth
-      peakinferToken: core.getInput('peakinfer-token') || '',
+      peakinferToken: core.getInput('peakinfer-token') || process.env.PEAKINFER_TOKEN || '',
       githubToken: core.getInput('github-token') || process.env.GITHUB_TOKEN || '',
       // Layer 1: Runtime
       runtimeSource: core.getInput('runtime-source') || undefined,

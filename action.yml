@@ -21,9 +21,8 @@ inputs:
       Pass via secrets.PEAKINFER_TOKEN.
     required: true
   github-token:
-    description: 'GitHub token for PR comments'
-    required: true
-    default: ${{ github.token }}
+    description: 'GitHub token for PR comments. Defaults to github.token if not provided.'
+    required: false
 
   # Layer 1: Runtime
   runtime-source:
