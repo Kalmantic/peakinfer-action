@@ -30120,9 +30120,10 @@ async function fetchOrgStats(token) {
 // =============================================================================
 // ENHANCEMENT PROMPTS
 // =============================================================================
-function getEnhancementPrompts(layersUsed, hasRecommendations) {
+function getEnhancementPrompts(layersUsed = [], hasRecommendations) {
     const prompts = [];
-    if (!layersUsed.includes('runtime')) {
+    const layers = layersUsed || [];
+    if (!layers.includes('runtime')) {
         prompts.push({
             layer: 'Runtime',
             message: 'Detect drift between code and actual behavior',
@@ -30131,7 +30132,7 @@ runtime-api-key: \${{ secrets.HELICONE_API_KEY }}`,
             docsUrl: 'https://peakinfer.com/docs/runtime',
         });
     }
-    if (!layersUsed.includes('benchmarks')) {
+    if (!layers.includes('benchmarks')) {
         prompts.push({
             layer: 'Benchmarks',
             message: 'Compare to InferenceMAX benchmarks',
@@ -30139,7 +30140,7 @@ runtime-api-key: \${{ secrets.HELICONE_API_KEY }}`,
             docsUrl: 'https://peakinfer.com/docs/benchmarks',
         });
     }
-    if (!layersUsed.includes('evals') && hasRecommendations) {
+    if (!layers.includes('evals') && hasRecommendations) {
         prompts.push({
             layer: 'Evals',
             message: 'Gate recommendations by quality scores',
@@ -30166,12 +30167,13 @@ function countIssues(inferencePoints) {
     }
     return { critical, warnings };
 }
-function renderLayerStatus(layersUsed) {
-    const check = (layer) => layersUsed.includes(layer) ? '✓' : '○';
+function renderLayerStatus(layersUsed = []) {
+    const layers = layersUsed || [];
+    const check = (layer) => layers.includes(layer) ? '✓' : '○';
     return `Code ${check('code')} | Runtime ${check('runtime')} | Benchmarks ${check('benchmarks')} | Evals ${check('evals')}`;
 }
 function generateComment(analysis, verdict, credits, showEnhancementPrompts) {
-    const { inferencePoints, drifts, benchmarkComparisons, insights, summary, layersUsed } = analysis;
+    const { inferencePoints, drifts, benchmarkComparisons, insights, summary, layersUsed = [] } = analysis;
     const issueCounts = countIssues(inferencePoints);
     const driftCount = drifts?.length || 0;
     const lines = [
@@ -30505,7 +30507,7 @@ async function run() {
         core.setOutput('critical-count', issueCounts.critical);
         core.setOutput('warning-count', issueCounts.warnings);
         core.setOutput('drift-count', driftCount);
-        core.setOutput('layers-used', analysis.layersUsed.join(','));
+        core.setOutput('layers-used', (analysis.layersUsed || []).join(','));
         if (credits) {
             core.setOutput('credits-used', credits.consumed);
             core.setOutput('credits-remaining', credits.remaining);
