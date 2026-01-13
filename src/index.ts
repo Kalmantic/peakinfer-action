@@ -1,10 +1,10 @@
 /**
- * PeakInfer GitHub Action v1.9.5
+ * PeakInfer GitHub Action v1.9.6
  *
  * Thin API client that calls peakinfer.com for analysis.
  * All analysis logic runs server-side - this action only:
  * 1. Collects files from the repository
- * 2. Sends them to the PeakInfer API (or uses BYOK mode)
+ * 2. Sends them to the PeakInfer API
  * 3. Posts results as PR comments with layer status
  */
 
@@ -35,9 +35,8 @@ const SKIP_DIRS = new Set([
 
 interface ActionInputs {
   path: string;
-  // Auth (one required)
-  anthropicApiKey?: string;
-  peakinferToken?: string;
+  // Auth
+  peakinferToken: string;
   githubToken: string;
   // Layer 1: Runtime
   runtimeSource?: string;
@@ -234,7 +233,7 @@ function collectFiles(dir: string, files: FileInfo[] = [], maxFiles = 50): FileI
 // =============================================================================
 
 async function callAnalysisAPI(
-  auth: { isByok: boolean; token: string },
+  token: string,
   files: FileInfo[],
   context: {
     repo: string;
@@ -245,13 +244,8 @@ async function callAnalysisAPI(
 ): Promise<AnalysisResponse | ErrorResponse> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
   };
-
-  if (auth.isByok) {
-    headers['X-Anthropic-Api-Key'] = auth.token;
-  } else {
-    headers['Authorization'] = `Bearer ${auth.token}`;
-  }
 
   const response = await fetch(`${PEAKINFER_API}/analyze`, {
     method: 'POST',
@@ -275,7 +269,7 @@ async function callAnalysisAPI(
           apiKey: layers.evals.apiKey,
         } : undefined,
       },
-      mode: auth.isByok ? 'byok' : 'paid',
+      mode: 'paid',
     }),
   });
 
@@ -391,8 +385,7 @@ function generateComment(
   analysis: AnalysisResponse['analysis'],
   verdict: Verdict,
   credits: AnalysisResponse['credits'] | undefined,
-  showEnhancementPrompts: boolean,
-  isByok: boolean
+  showEnhancementPrompts: boolean
 ): string {
   const { inferencePoints, drifts, benchmarkComparisons, insights, summary, layersUsed } = analysis;
   const issueCounts = countIssues(inferencePoints);
@@ -518,9 +511,7 @@ function generateComment(
 
   // Footer
   lines.push('---');
-  if (isByok) {
-    lines.push('*[PeakInfer](https://peakinfer.com) | BYOK Mode*');
-  } else if (credits) {
+  if (credits) {
     lines.push(`*Credits: ${credits.consumed} used | ${credits.remaining} remaining | [PeakInfer](https://peakinfer.com)*`);
   } else {
     lines.push('*[PeakInfer](https://peakinfer.com)*');
@@ -613,8 +604,7 @@ async function run(): Promise<void> {
     const inputs: ActionInputs = {
       path: core.getInput('path') || './src',
       // Auth
-      anthropicApiKey: core.getInput('anthropic-api-key') || undefined,
-      peakinferToken: core.getInput('peakinfer-token') || undefined,
+      peakinferToken: core.getInput('peakinfer-token') || '',
       githubToken: core.getInput('github-token') || process.env.GITHUB_TOKEN || '',
       // Layer 1: Runtime
       runtimeSource: core.getInput('runtime-source') || undefined,
@@ -634,11 +624,8 @@ async function run(): Promise<void> {
     };
 
     // 1. Auth check
-    const isByok = !!inputs.anthropicApiKey;
-    const isPaid = !!inputs.peakinferToken;
-
-    if (!isByok && !isPaid) {
-      core.setFailed('Authentication required. Provide either anthropic-api-key (BYOK mode) or peakinfer-token (paid mode).');
+    if (!inputs.peakinferToken) {
+      core.setFailed('Authentication required. Provide peakinfer-token via secrets.PEAKINFER_TOKEN.');
       return;
     }
 
@@ -646,11 +633,6 @@ async function run(): Promise<void> {
       core.setFailed('GitHub token is required for PR comments');
       return;
     }
-
-    const auth = {
-      isByok,
-      token: isByok ? inputs.anthropicApiKey! : inputs.peakinferToken!,
-    };
 
     const context = github.context;
     const octokit = github.getOctokit(inputs.githubToken);
@@ -709,7 +691,7 @@ async function run(): Promise<void> {
 
     // 4. Call API
     core.info('Calling PeakInfer API...');
-    const response = await callAnalysisAPI(auth, files, { repo, prNumber, sha }, layers);
+    const response = await callAnalysisAPI(inputs.peakinferToken, files, { repo, prNumber, sha }, layers);
 
     // 5. Handle errors
     if ('error' in response) {
@@ -718,15 +700,13 @@ async function run(): Promise<void> {
 
         // Fetch real org stats from the API
         let valueDelivered = { prsAnalyzed: 0, criticalCaught: 0, estimatedSavings: 0 };
-        if (!auth.isByok && auth.token) {
-          const stats = await fetchOrgStats(auth.token);
-          if (stats) {
-            valueDelivered = {
-              prsAnalyzed: stats.prsAnalyzed,
-              criticalCaught: stats.criticalCaught,
-              estimatedSavings: stats.estimatedSavings,
-            };
-          }
+        const stats = await fetchOrgStats(inputs.peakinferToken);
+        if (stats) {
+          valueDelivered = {
+            prsAnalyzed: stats.prsAnalyzed,
+            criticalCaught: stats.criticalCaught,
+            estimatedSavings: stats.estimatedSavings,
+          };
         }
 
         const comment = generateExhaustedComment(
@@ -770,7 +750,7 @@ async function run(): Promise<void> {
 
     // 7. Post PR comment
     if (inputs.commentMode === 'always' || (inputs.commentMode === 'on-issues' && (issueCounts.critical > 0 || issueCounts.warnings > 0))) {
-      const comment = generateComment(analysis, verdict, credits, inputs.showEnhancementPrompts, isByok);
+      const comment = generateComment(analysis, verdict, credits, inputs.showEnhancementPrompts);
       await octokit.rest.issues.createComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
