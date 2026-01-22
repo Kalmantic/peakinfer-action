@@ -1,11 +1,16 @@
 /**
- * PeakInfer GitHub Action v1.9.6
+ * PeakInfer GitHub Action v1.9.7
  *
  * Thin API client that calls peakinfer.com for analysis.
  * All analysis logic runs server-side - this action only:
  * 1. Collects files from the repository
  * 2. Sends them to the PeakInfer API
  * 3. Posts results as PR comments with layer status
+ *
+ * v1.9.7 Changes:
+ * - Show ALL issues with their solutions (not just top issue)
+ * - Remove hardcoded limits on insights, drifts, and benchmarks
+ * - Improved PR output format with severity-grouped issues
  */
 
 import * as core from '@actions/core';
@@ -409,48 +414,102 @@ function generateComment(
     lines.push('');
   }
 
-  // Top issue (if any critical or warnings)
-  const topIssue = findTopIssue(inferencePoints);
-  if (topIssue) {
-    lines.push(`### Critical: ${topIssue.headline}`);
-    lines.push(`**Location:** \`${topIssue.location}\``);
-    lines.push(`**Impact:** ${topIssue.evidence}`);
-    if (topIssue.suggestedFix) {
-      lines.push('');
-      lines.push('**Fix:**');
-      lines.push('```');
-      lines.push(topIssue.suggestedFix);
-      lines.push('```');
-    }
+  // All Issues with Solutions (main section - not collapsed for visibility)
+  const allIssues = collectAllIssues(inferencePoints);
+  if (allIssues.length > 0) {
+    lines.push('### Issues Found');
     lines.push('');
+
+    // Group issues by severity for better organization
+    const criticalIssues = allIssues.filter(i => i.severity === 'critical');
+    const warningIssues = allIssues.filter(i => i.severity === 'warning');
+    const infoIssues = allIssues.filter(i => i.severity === 'info');
+
+    // Critical issues (always expanded)
+    if (criticalIssues.length > 0) {
+      lines.push(`#### Critical Issues (${criticalIssues.length})`);
+      lines.push('');
+      for (const issue of criticalIssues) {
+        lines.push(`**${issue.headline}**`);
+        lines.push(`- **Location:** \`${issue.location}\``);
+        lines.push(`- **Impact:** ${issue.evidence}`);
+        if (issue.suggestedFix) {
+          lines.push(`- **Solution:**`);
+          lines.push('```');
+          lines.push(issue.suggestedFix);
+          lines.push('```');
+        }
+        lines.push('');
+      }
+    }
+
+    // Warning issues
+    if (warningIssues.length > 0) {
+      lines.push('<details>');
+      lines.push(`<summary>Warning Issues (${warningIssues.length})</summary>`);
+      lines.push('');
+      for (const issue of warningIssues) {
+        lines.push(`**${issue.headline}**`);
+        lines.push(`- **Location:** \`${issue.location}\``);
+        lines.push(`- **Impact:** ${issue.evidence}`);
+        if (issue.suggestedFix) {
+          lines.push(`- **Solution:**`);
+          lines.push('```');
+          lines.push(issue.suggestedFix);
+          lines.push('```');
+        }
+        lines.push('');
+      }
+      lines.push('</details>');
+      lines.push('');
+    }
+
+    // Info issues (collapsed)
+    if (infoIssues.length > 0) {
+      lines.push('<details>');
+      lines.push(`<summary>Info Issues (${infoIssues.length})</summary>`);
+      lines.push('');
+      for (const issue of infoIssues) {
+        lines.push(`**${issue.headline}**`);
+        lines.push(`- **Location:** \`${issue.location}\``);
+        lines.push(`- **Impact:** ${issue.evidence}`);
+        if (issue.suggestedFix) {
+          lines.push(`- **Solution:**`);
+          lines.push('```');
+          lines.push(issue.suggestedFix);
+          lines.push('```');
+        }
+        lines.push('');
+      }
+      lines.push('</details>');
+      lines.push('');
+    }
   }
 
-  // Drift detections (if runtime layer enabled)
+  // Drift detections - show ALL (no limit)
   if (drifts && drifts.length > 0) {
     lines.push('<details>');
-    lines.push('<summary>Drift Detections (' + drifts.length + ')</summary>');
+    lines.push(`<summary>Drift Detections (${drifts.length})</summary>`);
     lines.push('');
-    lines.push('| Location | Type | Declared | Observed |');
-    lines.push('|----------|------|----------|----------|');
-    for (const drift of drifts.slice(0, 10)) {
-      lines.push(`| \`${drift.file}:${drift.line}\` | ${drift.type} | ${drift.declared} | ${drift.observed} |`);
-    }
-    if (drifts.length > 10) {
-      lines.push(`| ... | ${drifts.length - 10} more | | |`);
+    lines.push('| Location | Type | Declared | Observed | Severity |');
+    lines.push('|----------|------|----------|----------|----------|');
+    for (const drift of drifts) {
+      const severityBadge = drift.severity === 'critical' ? '**CRITICAL**' : drift.severity === 'warning' ? 'WARNING' : 'INFO';
+      lines.push(`| \`${drift.file}:${drift.line}\` | ${drift.type} | ${drift.declared} | ${drift.observed} | ${severityBadge} |`);
     }
     lines.push('');
     lines.push('</details>');
     lines.push('');
   }
 
-  // Benchmark comparisons (if benchmarks layer enabled)
+  // Benchmark comparisons - show ALL (no limit)
   if (benchmarkComparisons && benchmarkComparisons.length > 0) {
     lines.push('<details>');
-    lines.push('<summary>Benchmark Comparison</summary>');
+    lines.push(`<summary>Benchmark Comparisons (${benchmarkComparisons.length})</summary>`);
     lines.push('');
     lines.push('| Model | Your p95 | Benchmark p95 | Gap |');
     lines.push('|-------|----------|---------------|-----|');
-    for (const comp of benchmarkComparisons.slice(0, 10)) {
+    for (const comp of benchmarkComparisons) {
       lines.push(`| ${comp.model} | ${comp.yourP95}ms | ${comp.benchmarkP95}ms | ${comp.gapDescription} |`);
     }
     lines.push('');
@@ -458,34 +517,14 @@ function generateComment(
     lines.push('');
   }
 
-  // All issues table (collapsed)
-  if (issueCounts.critical > 0 || issueCounts.warnings > 0) {
+  // All insights - show ALL (no limit), include all severities
+  if (insights && insights.length > 0) {
     lines.push('<details>');
-    lines.push('<summary>All Issues (' + (issueCounts.critical + issueCounts.warnings) + ')</summary>');
+    lines.push(`<summary>Insights (${insights.length})</summary>`);
     lines.push('');
-    lines.push('| Location | Severity | Issue |');
-    lines.push('|----------|----------|-------|');
-
-    for (const point of inferencePoints) {
-      for (const issue of point.issues || []) {
-        const severity = issue.severity === 'critical' ? 'CRITICAL' : issue.severity === 'warning' ? 'WARNING' : 'INFO';
-        lines.push(`| \`${point.file}:${point.line}\` | ${severity} | ${issue.headline} |`);
-      }
-    }
-    lines.push('');
-    lines.push('</details>');
-    lines.push('');
-  }
-
-  // High-priority insights
-  const criticalInsights = insights.filter(i => i.severity === 'critical' || i.severity === 'warning');
-  if (criticalInsights.length > 0) {
-    lines.push('<details>');
-    lines.push('<summary>Insights (' + criticalInsights.length + ')</summary>');
-    lines.push('');
-    for (const insight of criticalInsights.slice(0, 5)) {
-      const severity = insight.severity === 'critical' ? 'CRITICAL' : 'WARNING';
-      lines.push(`- **[${severity}] ${insight.title}**: ${insight.description}`);
+    for (const insight of insights) {
+      const severityBadge = insight.severity === 'critical' ? 'CRITICAL' : insight.severity === 'warning' ? 'WARNING' : 'INFO';
+      lines.push(`- **[${severityBadge}] ${insight.title}**: ${insight.description}`);
     }
     lines.push('');
     lines.push('</details>');
@@ -522,22 +561,20 @@ function generateComment(
   return lines.join('\n');
 }
 
-function findTopIssue(inferencePoints: InferencePoint[]): (Issue & { location: string }) | null {
+/**
+ * Collect all issues from inference points with their locations
+ */
+function collectAllIssues(inferencePoints: InferencePoint[]): Array<Issue & { location: string }> {
+  const issues: Array<Issue & { location: string }> = [];
   for (const point of inferencePoints) {
     for (const issue of point.issues || []) {
-      if (issue.severity === 'critical') {
-        return { ...issue, location: `${point.file}:${point.line}` };
-      }
+      issues.push({
+        ...issue,
+        location: `${point.file}:${point.line}`,
+      });
     }
   }
-  for (const point of inferencePoints) {
-    for (const issue of point.issues || []) {
-      if (issue.severity === 'warning') {
-        return { ...issue, location: `${point.file}:${point.line}` };
-      }
-    }
-  }
-  return null;
+  return issues;
 }
 
 function generateExhaustedComment(
